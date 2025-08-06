@@ -336,7 +336,7 @@ Qt6WidgetsTools_DIR:PATH=/usr/lib/x86_64-linux-gnu/cmake/Qt6WidgetsTools
 Qt6Widgets_DIR:PATH=/usr/lib/x86_64-linux-gnu/cmake/Qt6Widgets
 
 //The directory containing a CMake configuration file for Qt6.
-Qt6_DIR:PATH=/usr/lib/x86_64-linux-gnu/cmake/Qt6
+Qt6_DIR:PATH=Qt6_DIR-NOTFOUND
 
 //Value Computed by CMake
 RadarVisualization_BINARY_DIR:STATIC=/workspace/build

@@ -3,6 +3,7 @@
 #include <QResizeEvent>
 #include <QFont>
 #include <QFontMetrics>
+#include <QPainterPath>
 #include <cmath>
 #include <algorithm>
 
@@ -209,12 +210,9 @@ void FFTWidget::drawSpectrum(QPainter& painter)
 {
     if (m_magnitudeSpectrum.empty() || m_rangeAxis.empty()) return;
 
-    // Create filled area similar to the reference image
-    QPolygonF spectrum;
+    // Create a vector of points for the spectrum
+    std::vector<QPointF> spectrumPoints;
     
-    // Start from bottom-left corner of the plot area
-    spectrum << QPointF(m_plotRect.left(), m_plotRect.bottom());
-
     for (size_t i = 0; i < m_magnitudeSpectrum.size(); ++i) {
         float range = m_rangeAxis[i];
         
@@ -228,26 +226,53 @@ void FFTWidget::drawSpectrum(QPainter& painter)
         float y = m_plotRect.bottom() - ((magDb - MIN_MAG_DB) / (MAX_MAG_DB - MIN_MAG_DB)) * m_plotRect.height();
         y = std::max(float(m_plotRect.top()), std::min(float(m_plotRect.bottom()), y));
 
-        spectrum << QPointF(x, y);
+        spectrumPoints.push_back(QPointF(x, y));
     }
     
-    // Close the polygon by adding bottom-right corner
-    if (!spectrum.isEmpty()) {
-        QPointF lastPoint = spectrum.last();
-        spectrum << QPointF(lastPoint.x(), m_plotRect.bottom());
+    if (spectrumPoints.size() < 2) return;
+
+    // Create smooth path using cubic Bezier curves
+    QPainterPath smoothPath;
+    
+    // Start from bottom-left corner
+    smoothPath.moveTo(m_plotRect.left(), m_plotRect.bottom());
+    
+    // Line to first point
+    smoothPath.lineTo(spectrumPoints[0]);
+    
+    // Create smooth curves through the spectrum points
+    for (size_t i = 1; i < spectrumPoints.size(); ++i) {
+        QPointF current = spectrumPoints[i];
+        QPointF previous = spectrumPoints[i - 1];
+        
+        // Calculate control points for smooth cubic curve
+        float dx = current.x() - previous.x();
+        float smoothingFactor = 0.3f; // Adjust this to control curve smoothness (0.1-0.5)
+        
+        QPointF control1(previous.x() + dx * smoothingFactor, previous.y());
+        QPointF control2(current.x() - dx * smoothingFactor, current.y());
+        
+        smoothPath.cubicTo(control1, control2, current);
+    }
+    
+    // Close the path by going to bottom-right corner and back to start
+    if (!spectrumPoints.empty()) {
+        QPointF lastPoint = spectrumPoints.back();
+        smoothPath.lineTo(lastPoint.x(), m_plotRect.bottom());
+        smoothPath.lineTo(m_plotRect.left(), m_plotRect.bottom());
     }
 
-    if (spectrum.size() > 2) {
-        // Set up brush for filled area with blue color similar to reference image
-        QColor fillColor(70, 150, 200, 180); // Semi-transparent blue
-        painter.setBrush(QBrush(fillColor));
-        
-        // Set pen for outline
-        painter.setPen(QPen(QColor(0, 120, 180), 2));
-        
-        // Draw filled polygon
-        painter.drawPolygon(spectrum);
-    }
+    // Set up brush for filled area with blue color similar to reference image
+    QColor fillColor(70, 150, 200, 180); // Semi-transparent blue
+    painter.setBrush(QBrush(fillColor));
+    
+    // Set pen for outline with anti-aliasing for smoother edges
+    painter.setPen(QPen(QColor(0, 120, 180), 2));
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    
+    // Draw the smooth filled path
+    painter.fillPath(smoothPath, QBrush(fillColor));
+    painter.drawPath(smoothPath);
 }
 
 void FFTWidget::drawTargetIndicators(QPainter& painter)
