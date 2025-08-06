@@ -134,10 +134,10 @@ void PPIWidget::drawTargets(QPainter& painter)
         float targetSize = 5.0f;// 6 + target.level * 0.1f; // Size based on level
         painter.drawEllipse(targetPos, targetSize, targetSize);
         
-        // Draw target ID
+        // Draw target ID just above the red dot
         painter.setPen(QPen(Qt::white, 1));
         painter.setFont(QFont("Arial", 8));
-        QPointF textPos = targetPos + QPointF(8, -8);
+        QPointF textPos = targetPos + QPointF(0, -targetSize - 5);
         painter.drawText(textPos, QString::number(target.target_id));
     }
 }
