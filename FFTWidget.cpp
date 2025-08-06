@@ -209,10 +209,11 @@ void FFTWidget::drawSpectrum(QPainter& painter)
 {
     if (m_magnitudeSpectrum.empty() || m_rangeAxis.empty()) return;
 
-    painter.setPen(QPen(QColor(0, 255, 255), 2));
-    painter.setBrush(Qt::NoBrush);
-
+    // Create filled area similar to the reference image
     QPolygonF spectrum;
+    
+    // Start from bottom-left corner of the plot area
+    spectrum << QPointF(m_plotRect.left(), m_plotRect.bottom());
 
     for (size_t i = 0; i < m_magnitudeSpectrum.size(); ++i) {
         float range = m_rangeAxis[i];
@@ -229,9 +230,23 @@ void FFTWidget::drawSpectrum(QPainter& painter)
 
         spectrum << QPointF(x, y);
     }
+    
+    // Close the polygon by adding bottom-right corner
+    if (!spectrum.isEmpty()) {
+        QPointF lastPoint = spectrum.last();
+        spectrum << QPointF(lastPoint.x(), m_plotRect.bottom());
+    }
 
-    if (spectrum.size() > 1) {
-        painter.drawPolyline(spectrum);
+    if (spectrum.size() > 2) {
+        // Set up brush for filled area with blue color similar to reference image
+        QColor fillColor(70, 150, 200, 180); // Semi-transparent blue
+        painter.setBrush(QBrush(fillColor));
+        
+        // Set pen for outline
+        painter.setPen(QPen(QColor(0, 120, 180), 2));
+        
+        // Draw filled polygon
+        painter.drawPolygon(spectrum);
     }
 }
 
