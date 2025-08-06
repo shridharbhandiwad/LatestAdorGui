@@ -28,8 +28,8 @@ MainWindow::MainWindow(QWidget *parent)
     setupTimer();
     
     // Initialize with simulated data
-    //generateSimulatedTargetData();
-   // generateSimulatedADCData();
+    generateSimulatedTargetData();
+    generateSimulatedADCData();
 }
 
 MainWindow::~MainWindow()
@@ -82,6 +82,16 @@ void MainWindow::setupUI()
     QVBoxLayout* fftLayout = new QVBoxLayout(fftGroup);
     
     m_fftWidget = new FFTWidget();
+    
+    // Set up radar parameters for range calculation
+    // These parameters should match your actual radar system
+    float sampleRate = 100000.0f;     // 100 kHz ADC sampling rate
+    float sweepTime = 0.001f;         // 1 ms chirp sweep time
+    float bandwidth = 50000000.0f;    // 50 MHz chirp bandwidth
+    float centerFreq = 24000000000.0f; // 24 GHz radar frequency
+    m_fftWidget->setRadarParameters(sampleRate, sweepTime, bandwidth, centerFreq);
+    m_fftWidget->setMaxRange(200.0f); // Initial max range
+    
     fftLayout->addWidget(m_fftWidget);
     
     m_rightSplitter->addWidget(fftGroup);
@@ -164,13 +174,14 @@ void MainWindow::setupTimer()
 void MainWindow::updateDisplay()
 {
     if (m_simulationEnabled) {
-        //generateSimulatedTargetData();
-        //generateSimulatedADCData();
+        generateSimulatedTargetData();
+        generateSimulatedADCData();
     }
     
     // Update widgets
     m_ppiWidget->updateTargets(m_currentTargets);
     m_fftWidget->updateData(m_currentADCFrame);
+    m_fftWidget->updateTargets(m_currentTargets);
     updateTrackTable();
     
     // Update statistics
@@ -204,7 +215,7 @@ void MainWindow::readPendingDatagrams() {
 
 void MainWindow::parseTrackMessage(const QString& message) {
                 qDebug()<<"track";
-                QStringList tokens = message.split(QRegularExpression("\\s+"), QString::SkipEmptyParts);
+                QStringList tokens = message.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
                 m_currentTargets.targets.clear();
                 m_currentTargets.numTracks = 0;
 
@@ -251,7 +262,7 @@ void MainWindow::parseTrackMessage(const QString& message) {
 }
 
 void MainWindow::parseADCMessage(const QString& message) {
-    QStringList tokens = message.split(QRegularExpression("\\s+"), QString::SkipEmptyParts);
+    QStringList tokens = message.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
     qDebug()<<"parseADCMessage";
     RawADCFrameTest frame;
     frame.sample_data.clear();
@@ -368,6 +379,7 @@ void MainWindow::onRangeChanged(int range)
 {
     float rangeMeters = range;
     m_ppiWidget->setMaxRange(rangeMeters);
+    m_fftWidget->setMaxRange(rangeMeters);
 }
 
 void MainWindow::updateTrackTable()
@@ -417,7 +429,7 @@ void MainWindow::generateSimulatedADCData()
     m_currentADCFrame.num_samples_per_chirp = numSamples;
     
     // Generate signal with multiple frequency components + noise
-    float sampleRate = 100000.0f; // 100 kHz
+    float sampleRate = 100000.0f; // 100 kHz (should match FFT widget configuration)
     float t_step = 1.0f / sampleRate;
     
     // Add some dominant frequency components

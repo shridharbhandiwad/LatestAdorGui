@@ -9,6 +9,11 @@
 FFTWidget::FFTWidget(QWidget *parent)
     : QWidget(parent)
     , m_maxMagnitude(0.0f)
+    , m_sampleRate(100000.0f)    // Default: 100 kHz
+    , m_sweepTime(0.001f)        // Default: 1 ms chirp
+    , m_bandwidth(50000000.0f)   // Default: 50 MHz bandwidth
+    , m_centerFreq(24000000000.0f) // Default: 24 GHz
+    , m_maxRange(300.0f)         // Default: 300 meters
     , m_margin(50)
 {
     setMinimumSize(400, 300);
@@ -23,6 +28,54 @@ void FFTWidget::updateData(const RawADCFrameTest& adcFrame)
         performFFT(adcFrame.sample_data);
     }
     update();
+}
+
+void FFTWidget::setFrequencyRange(float minFreq, float maxFreq)
+{
+    m_minFrequency = minFreq;
+    m_maxFrequency = maxFreq;
+    update();
+}
+
+void FFTWidget::updateTargets(const TargetTrackData& targets)
+{
+    m_currentTargets = targets;
+    update();
+}
+
+void FFTWidget::setRadarParameters(float sampleRate, float sweepTime, float bandwidth, float centerFreq)
+{
+    m_sampleRate = sampleRate;
+    m_sweepTime = sweepTime;
+    m_bandwidth = bandwidth;
+    m_centerFreq = centerFreq;
+    
+    // Recalculate range axis if we have data
+    if (!m_magnitudeSpectrum.empty()) {
+        performFFT(m_currentFrame.sample_data);
+    }
+    update();
+}
+
+void FFTWidget::setMaxRange(float maxRange)
+{
+    m_maxRange = maxRange;
+    update();
+}
+
+float FFTWidget::frequencyToRange(float frequency) const
+{
+    // FMCW radar range calculation: R = (f_beat * c * T_sweep) / (2 * B)
+    // where f_beat is the beat frequency, c is speed of light, T_sweep is sweep time, B is bandwidth
+    return (frequency * SPEED_OF_LIGHT * m_sweepTime) / (2.0f * m_bandwidth);
+}
+
+float FFTWidget::sampleIndexToRange(int sampleIndex) const
+{
+    if (m_rangeAxis.empty() || sampleIndex >= static_cast<int>(m_rangeAxis.size())) {
+        return 0.0f;
+    }
+    return m_rangeAxis[sampleIndex];
 }
 
 void FFTWidget::resizeEvent(QResizeEvent *event)
@@ -47,6 +100,7 @@ void FFTWidget::paintEvent(QPaintEvent *event)
     drawBackground(painter);
     drawGrid(painter);
     drawSpectrum(painter);
+    drawTargetIndicators(painter);
     drawLabels(painter);
 }
 
@@ -68,12 +122,19 @@ void FFTWidget::performFFT(const std::vector<float>& input)
 
     m_magnitudeSpectrum.resize(n / 2);
     m_frequencyAxis.resize(n / 2);
+    m_rangeAxis.resize(n / 2);
 
     m_maxMagnitude = 0.0f;
     for (size_t i = 0; i < n / 2; ++i) {
         float magnitude = std::abs(complexData[i]);
         m_magnitudeSpectrum[i] = 20.0f * std::log10(magnitude + 1e-10f);
-        m_frequencyAxis[i] = static_cast<float>(i);
+        
+        // Calculate frequency for this bin
+        float frequency = (static_cast<float>(i) * m_sampleRate) / static_cast<float>(n);
+        m_frequencyAxis[i] = frequency;
+        
+        // Calculate corresponding range
+        m_rangeAxis[i] = frequencyToRange(frequency);
 
         if (m_magnitudeSpectrum[i] > m_maxMagnitude) {
             m_maxMagnitude = m_magnitudeSpectrum[i];
@@ -146,7 +207,7 @@ void FFTWidget::drawGrid(QPainter& painter)
 
 void FFTWidget::drawSpectrum(QPainter& painter)
 {
-    if (m_magnitudeSpectrum.empty()) return;
+    if (m_magnitudeSpectrum.empty() || m_rangeAxis.empty()) return;
 
     painter.setPen(QPen(QColor(0, 255, 255), 2));
     painter.setBrush(Qt::NoBrush);
@@ -154,8 +215,13 @@ void FFTWidget::drawSpectrum(QPainter& painter)
     QPolygonF spectrum;
 
     for (size_t i = 0; i < m_magnitudeSpectrum.size(); ++i) {
-        float index = m_frequencyAxis[i];
-        float x = m_plotRect.left() + (index / m_magnitudeSpectrum.size()) * m_plotRect.width();
+        float range = m_rangeAxis[i];
+        
+        // Only plot points within our max range
+        if (range > m_maxRange) continue;
+        
+        // Map range to x-coordinate
+        float x = m_plotRect.left() + (range / m_maxRange) * m_plotRect.width();
 
         float magDb = m_magnitudeSpectrum[i];
         float y = m_plotRect.bottom() - ((magDb - MIN_MAG_DB) / (MAX_MAG_DB - MIN_MAG_DB)) * m_plotRect.height();
@@ -169,25 +235,87 @@ void FFTWidget::drawSpectrum(QPainter& painter)
     }
 }
 
+void FFTWidget::drawTargetIndicators(QPainter& painter)
+{
+    if (m_currentTargets.numTracks == 0) return;
+
+    // Set up different colors for different target types based on radial speed
+    for (uint32_t i = 0; i < m_currentTargets.numTracks; ++i) {
+        const TargetTrack& target = m_currentTargets.targets[i];
+        
+        // Skip targets outside the azimuth range (-90 to +90 degrees) 
+        // to match the PPI display behavior
+        if (target.azimuth < -90.0f || target.azimuth > 90.0f) {
+            continue;
+        }
+        
+        // Skip targets outside our range display
+        if (target.radius > m_maxRange || target.radius < 0) {
+            continue;
+        }
+        
+        // Choose color based on radial speed (same as PPI)
+        QColor targetColor;
+        if (target.radial_speed > 5.0f) {
+            targetColor = QColor(255, 100, 100); // Red for approaching targets
+        } else if (target.radial_speed < -5.0f) {
+            targetColor = QColor(100, 100, 255); // Blue for receding targets
+        } else {
+            targetColor = QColor(100, 255, 100); // Green for stationary targets
+        }
+        
+        // Calculate x position for target range
+        float x = m_plotRect.left() + (target.radius / m_maxRange) * m_plotRect.width();
+        
+        // Draw vertical line at target range
+        painter.setPen(QPen(targetColor, 2, Qt::DashLine));
+        painter.drawLine(QPointF(x, m_plotRect.top()), QPointF(x, m_plotRect.bottom()));
+        
+        // Draw target information at the top
+        painter.setPen(QPen(targetColor, 1));
+        painter.setFont(QFont("Arial", 8));
+        
+        QString targetInfo = QString("T%1\n%2m\n%3°")
+                            .arg(target.target_id)
+                            .arg(target.radius, 0, 'f', 1)
+                            .arg(target.azimuth, 0, 'f', 0);
+        
+        // Calculate text position
+        QFontMetrics fm(painter.font());
+        QRect textRect = fm.boundingRect(targetInfo);
+        
+        // Position text above the plot area, adjust if too close to edges
+        float textX = x - textRect.width() / 2;
+        if (textX < m_plotRect.left()) textX = m_plotRect.left();
+        if (textX + textRect.width() > m_plotRect.right()) textX = m_plotRect.right() - textRect.width();
+        
+        // Draw semi-transparent background for text
+        QRect bgRect(textX - 2, m_plotRect.top() - textRect.height() - 5, 
+                     textRect.width() + 4, textRect.height() + 2);
+        painter.fillRect(bgRect, QColor(0, 0, 0, 150));
+        
+        // Draw text
+        painter.drawText(QPointF(textX, m_plotRect.top() - 5), targetInfo);
+    }
+}
+
 void FFTWidget::drawLabels(QPainter& painter)
 {
     painter.setPen(QPen(Qt::white, 1));
     painter.setFont(QFont("Arial", 10));
 
-    if (!m_magnitudeSpectrum.empty()) {
-        int numBins = static_cast<int>(m_magnitudeSpectrum.size());
+    // X-axis labels (Range in meters)
+    for (int i = 0; i <= GRID_LINES_X; ++i) {
+        float range = (float(i) / GRID_LINES_X) * m_maxRange;
+        int x = m_plotRect.left() + (i * m_plotRect.width()) / GRID_LINES_X;
 
-        for (int i = 0; i <= GRID_LINES_X; ++i) {
-            int bin = (i * numBins) / GRID_LINES_X;
-            int x = m_plotRect.left() + (i * m_plotRect.width()) / GRID_LINES_X;
-
-            QString label = QString::number(bin);
-            QFontMetrics fm(painter.font());
-            QRect textRect = fm.boundingRect(label);
-            painter.drawText(x - textRect.width() / 2, m_plotRect.bottom() + 15, label);
-        }
+        QString label = QString::number(range, 'f', 1) + "m";
+        QFontMetrics fm(painter.font());
+        QRect textRect = fm.boundingRect(label);
+        painter.drawText(x - textRect.width() / 2, m_plotRect.bottom() + 15, label);
     }
 
+    // Y-axis labels (Magnitude in dB)
     for (int i = 0; i <= GRID_LINES_Y; ++i) {
         float mag = MIN_MAG_DB + (float(i) / GRID_LINES_Y) * (MAX_MAG_DB - MIN_MAG_DB);
         int y = m_plotRect.bottom() - (i * m_plotRect.height()) / GRID_LINES_Y;
@@ -196,10 +324,11 @@ void FFTWidget::drawLabels(QPainter& painter)
         painter.drawText(m_plotRect.left() - 35, y + 5, magText);
     }
 
+    // Axis labels
     painter.setFont(QFont("Arial", 12, QFont::Bold));
 
     QFontMetrics fm(painter.font());
-    QString xLabel = "Sample Index";
+    QString xLabel = "Range (meters)";
     QRect xLabelRect = fm.boundingRect(xLabel);
     painter.drawText(
         m_plotRect.center().x() - xLabelRect.width() / 2,
@@ -215,12 +344,21 @@ void FFTWidget::drawLabels(QPainter& painter)
     painter.drawText(-yLabelRect.width() / 2, 0, yLabel);
     painter.restore();
 
+    // Title and info
     painter.setFont(QFont("Arial", 14, QFont::Bold));
-    painter.drawText(QPointF(10, 25), "FFT Spectrum - Raw ADC Data");
+    painter.drawText(QPointF(10, 25), "FFT Spectrum - Range Domain");
 
     painter.setFont(QFont("Arial", 10));
-    QString frameInfo = QString("Frame: %1, Samples: %2")
+    QString frameInfo = QString("Frame: %1, Samples: %2, Max Range: %3m")
                        .arg(1)
-                       .arg(m_currentFrame.sample_data.size());
+                       .arg(m_currentFrame.sample_data.size())
+                       .arg(m_maxRange, 0, 'f', 1);
     painter.drawText(QPointF(10, height() - 10), frameInfo);
+    
+    // Display radar parameters
+    QString radarInfo = QString("SR: %1kHz, BW: %2MHz, Sweep: %3ms")
+                       .arg(m_sampleRate / 1000.0f, 0, 'f', 1)
+                       .arg(m_bandwidth / 1000000.0f, 0, 'f', 1)
+                       .arg(m_sweepTime * 1000.0f, 0, 'f', 2);
+    painter.drawText(QPointF(10, height() - 25), radarInfo);
 }

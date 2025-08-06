@@ -1,0 +1,2 @@
+set(__QT_DEPLOY_TARGET_RadarVisualization_FILE /workspace/build/RadarVisualization)
+set(__QT_DEPLOY_TARGET_RadarVisualization_TYPE EXECUTABLE)
