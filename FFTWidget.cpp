@@ -307,9 +307,25 @@ void FFTWidget::drawTargetIndicators(QPainter& painter)
         // Calculate x position for target range
         float x = m_plotRect.left() + (target.radius / m_maxRange) * m_plotRect.width();
         
-        // Draw vertical line at target range
-        painter.setPen(QPen(targetColor, 2, Qt::DashLine));
-        painter.drawLine(QPointF(x, m_plotRect.top()), QPointF(x, m_plotRect.bottom()));
+        // Find the magnitude at this range to cutoff the vertical line
+        float cutoffY = m_plotRect.bottom(); // Default to bottom if no data
+        
+        // Find the closest range bin to determine magnitude cutoff
+        if (!m_rangeAxis.empty() && !m_magnitudeSpectrum.empty()) {
+            auto it = std::lower_bound(m_rangeAxis.begin(), m_rangeAxis.end(), target.radius);
+            if (it != m_rangeAxis.end()) {
+                size_t index = std::distance(m_rangeAxis.begin(), it);
+                if (index < m_magnitudeSpectrum.size()) {
+                    float magDb = m_magnitudeSpectrum[index];
+                    cutoffY = m_plotRect.bottom() - ((magDb - MIN_MAG_DB) / (MAX_MAG_DB - MIN_MAG_DB)) * m_plotRect.height();
+                    cutoffY = std::max(float(m_plotRect.top()), std::min(float(m_plotRect.bottom()), cutoffY));
+                }
+            }
+        }
+        
+        // Draw vertical line at target range (solid line, increased width, cutoff at magnitude)
+        painter.setPen(QPen(targetColor, 4, Qt::SolidLine));
+        painter.drawLine(QPointF(x, cutoffY), QPointF(x, m_plotRect.bottom()));
         
         // Draw target information at the top
         painter.setPen(QPen(targetColor, 1));
