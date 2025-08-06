@@ -19,6 +19,9 @@ public:
     // New methods for radar range calculation
     void setRadarParameters(float sampleRate, float sweepTime, float bandwidth, float centerFreq);
     void setMaxRange(float maxRange);
+    
+    // Target information methods
+    void updateTargets(const TargetTrackData& targets);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -29,6 +32,7 @@ private:
     void drawBackground(QPainter& painter);
     void drawGrid(QPainter& painter);
     void drawSpectrum(QPainter& painter);
+    void drawTargetIndicators(QPainter& painter);
     void drawLabels(QPainter& painter);
     
     // Range calculation helper methods
@@ -44,6 +48,7 @@ private:
     std::vector<float> m_rangeAxis;  // New: range axis in meters
     
     RawADCFrameTest m_currentFrame;
+    TargetTrackData m_currentTargets;
     float m_minFrequency;
     float m_maxFrequency;
     float m_maxMagnitude;

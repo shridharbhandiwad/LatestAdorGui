@@ -37,6 +37,12 @@ void FFTWidget::setFrequencyRange(float minFreq, float maxFreq)
     update();
 }
 
+void FFTWidget::updateTargets(const TargetTrackData& targets)
+{
+    m_currentTargets = targets;
+    update();
+}
+
 void FFTWidget::setRadarParameters(float sampleRate, float sweepTime, float bandwidth, float centerFreq)
 {
     m_sampleRate = sampleRate;
@@ -94,6 +100,7 @@ void FFTWidget::paintEvent(QPaintEvent *event)
     drawBackground(painter);
     drawGrid(painter);
     drawSpectrum(painter);
+    drawTargetIndicators(painter);
     drawLabels(painter);
 }
 
@@ -225,6 +232,70 @@ void FFTWidget::drawSpectrum(QPainter& painter)
 
     if (spectrum.size() > 1) {
         painter.drawPolyline(spectrum);
+    }
+}
+
+void FFTWidget::drawTargetIndicators(QPainter& painter)
+{
+    if (m_currentTargets.numTracks == 0) return;
+
+    // Set up different colors for different target types based on radial speed
+    for (uint32_t i = 0; i < m_currentTargets.numTracks; ++i) {
+        const TargetTrack& target = m_currentTargets.targets[i];
+        
+        // Skip targets outside the azimuth range (-90 to +90 degrees) 
+        // to match the PPI display behavior
+        if (target.azimuth < -90.0f || target.azimuth > 90.0f) {
+            continue;
+        }
+        
+        // Skip targets outside our range display
+        if (target.radius > m_maxRange || target.radius < 0) {
+            continue;
+        }
+        
+        // Choose color based on radial speed (same as PPI)
+        QColor targetColor;
+        if (target.radial_speed > 5.0f) {
+            targetColor = QColor(255, 100, 100); // Red for approaching targets
+        } else if (target.radial_speed < -5.0f) {
+            targetColor = QColor(100, 100, 255); // Blue for receding targets
+        } else {
+            targetColor = QColor(100, 255, 100); // Green for stationary targets
+        }
+        
+        // Calculate x position for target range
+        float x = m_plotRect.left() + (target.radius / m_maxRange) * m_plotRect.width();
+        
+        // Draw vertical line at target range
+        painter.setPen(QPen(targetColor, 2, Qt::DashLine));
+        painter.drawLine(QPointF(x, m_plotRect.top()), QPointF(x, m_plotRect.bottom()));
+        
+        // Draw target information at the top
+        painter.setPen(QPen(targetColor, 1));
+        painter.setFont(QFont("Arial", 8));
+        
+        QString targetInfo = QString("T%1\n%2m\n%3°")
+                            .arg(target.target_id)
+                            .arg(target.radius, 0, 'f', 1)
+                            .arg(target.azimuth, 0, 'f', 0);
+        
+        // Calculate text position
+        QFontMetrics fm(painter.font());
+        QRect textRect = fm.boundingRect(targetInfo);
+        
+        // Position text above the plot area, adjust if too close to edges
+        float textX = x - textRect.width() / 2;
+        if (textX < m_plotRect.left()) textX = m_plotRect.left();
+        if (textX + textRect.width() > m_plotRect.right()) textX = m_plotRect.right() - textRect.width();
+        
+        // Draw semi-transparent background for text
+        QRect bgRect(textX - 2, m_plotRect.top() - textRect.height() - 5, 
+                     textRect.width() + 4, textRect.height() + 2);
+        painter.fillRect(bgRect, QColor(0, 0, 0, 150));
+        
+        // Draw text
+        painter.drawText(QPointF(textX, m_plotRect.top() - 5), targetInfo);
     }
 }
 

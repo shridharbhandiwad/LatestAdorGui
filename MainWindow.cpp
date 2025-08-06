@@ -28,8 +28,8 @@ MainWindow::MainWindow(QWidget *parent)
     setupTimer();
     
     // Initialize with simulated data
-    //generateSimulatedTargetData();
-   // generateSimulatedADCData();
+    generateSimulatedTargetData();
+    generateSimulatedADCData();
 }
 
 MainWindow::~MainWindow()
@@ -174,13 +174,14 @@ void MainWindow::setupTimer()
 void MainWindow::updateDisplay()
 {
     if (m_simulationEnabled) {
-        //generateSimulatedTargetData();
-        //generateSimulatedADCData();
+        generateSimulatedTargetData();
+        generateSimulatedADCData();
     }
     
     // Update widgets
     m_ppiWidget->updateTargets(m_currentTargets);
     m_fftWidget->updateData(m_currentADCFrame);
+    m_fftWidget->updateTargets(m_currentTargets);
     updateTrackTable();
     
     // Update statistics
