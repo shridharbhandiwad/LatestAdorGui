@@ -12,6 +12,7 @@
 #include <QGroupBox>
 #include <QSpinBox>
 #include <QPushButton>
+#include <QLineEdit>
 #include <random>
 
 #include "PPIWidget.h"
@@ -27,10 +28,20 @@ public:
     ~MainWindow();
 
 private slots:
+private slots:
     void updateDisplay();
     void readPendingDatagrams();
     void onSimulateDataToggled();
     void onRangeChanged(int range);
+    void onMinRangeChanged(const QString& text);          // NEW
+    void onChirpChanged(const QString& text);
+    void onBandwidthChanged(const QString& text);
+    void onMinSpeedChanged(const QString& text);          // NEW
+    void onMaxSpeedChanged(const QString& text);          // NEW
+    void onChirpsPerFrameChanged(const QString& text);    // NEW
+    void onSamplesPerChirpChanged(const QString& text);   // NEW
+    void onApplySettings();
+    void onResetSettings();
 
 private:
     void setupUI();
@@ -79,4 +90,20 @@ private:
     // Statistics
     uint64_t m_frameCount;
     uint64_t m_targetCount;
+
+    // Add these to the private members section
+    QLineEdit* m_chirpLineEdit;
+    QLineEdit* m_bandwidthLineEdit;
+    // Add these to the private members section
+    QLineEdit* m_minRangeLineEdit;
+    QLineEdit* m_minSpeedLineEdit;
+    QLineEdit* m_maxSpeedLineEdit;
+    QLineEdit* m_chirpsPerFrameLineEdit;
+    QLineEdit* m_samplesPerChirpLineEdit;
+
+    // Remove these old ones:
+    // QLineEdit* m_dopplerLineEdit;
+    // QLineEdit* m_rcsLineEdit;
+    QPushButton* m_applyButton;
+    QPushButton* m_resetButton;
 };

@@ -2,7 +2,7 @@
 
 #include <cstdint>
 #include <vector>
-
+#include <math.h>
 // Rx Data Format enumeration (placeholder)
 #pragma pack(push, 1)
 enum class Rx_Data_Format_t {
@@ -54,12 +54,37 @@ struct RawADCFrame {
                    interleaved_rx(0), data_format(Rx_Data_Format_t::REAL_FLOAT) {}
 };
 
+// Add to MainWindow.h - new structure for complex samples
+struct ComplexSample {
+    float I;  // In-phase component
+    float Q;  // Quadrature component
+
+    float magnitude() const {
+        return std::sqrt(I * I + Q * Q);
+    }
+
+    float phase() const {
+        return std::atan2(Q, I);
+    }
+};
+
+
 // Raw ADC Frame structure
 struct RawADCFrameTest {
     uint32_t msgId;
-    uint32_t num_samples_per_chirp;
-    std::vector<float> sample_data;
+    uint32_t num_samples_per_chirp;  // This should be number of complex samples (32)
+    std::vector<ComplexSample> complex_data;  // Changed from sample_data
+    std::vector<float> magnitude_data;        // Computed magnitudes
+
+    void computeMagnitudes() {
+        magnitude_data.clear();
+        magnitude_data.reserve(complex_data.size());
+        for (const auto& sample : complex_data) {
+            magnitude_data.push_back(sample.magnitude());
+        }
+    }
 };
+
 
 // UDP Message types
 enum class MessageType : uint8_t {
